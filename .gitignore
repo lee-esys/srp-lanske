@@ -1,0 +1,60 @@
+# -----------------------------
+# Flutter / Dart
+# -----------------------------
+.dart_tool/
+.packages
+.pub/
+build/
+
+# Flutter generated
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# Dart / Flutter web build artifacts
+**/doc/api/
+**/ios/Flutter/.last_build_id
+
+# -----------------------------
+# IDE / Editor
+# -----------------------------
+.idea/
+*.iml
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+
+# -----------------------------
+# OS files
+# -----------------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------------
+# Logs / temp
+# -----------------------------
+*.log
+*.tmp
+*.swp
+tmp/
+
+# -----------------------------
+# Environment / secrets
+# -----------------------------
+.env
+.env.*
+*.local
+
+# Firebase / service account / credentials
+service-account*.json
+google-services.json
+GoogleService-Info.plist
+firebase-debug.log
+
+# -----------------------------
+# Coverage / reports
+# -----------------------------
+coverage/

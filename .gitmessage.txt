@@ -1,0 +1,34 @@
+<emoji> <type>: <summary> refs #issue
+
+# Commit message convention
+#
+# Format:
+# <emoji> <type>: <summary> refs #issue
+# <emoji> <type>: <summary> closes #issue
+#
+# Types:
+# feat     : new feature
+# fix      : bug fix
+# refactor : code refactoring
+# chore    : setup / config / maintenance
+# docs     : documentation
+# test     : tests
+# remove   : deletion
+#
+# Emoji examples:
+# 🏗️ chore:
+# ✨ feat:
+# 🖼️ feat:
+# 🔌 feat:
+# 🐛 fix:
+# ♻️ refactor:
+# 📝 docs:
+# ✅ test:
+# 🔥 remove:
+# 🚚 chore:
+# 🔒 chore:
+#
+# Examples:
+# 🏗️ chore: initialize project structure refs #1
+# 🖼️ feat: add doubles scheduler page skeleton refs #2
+# 🔌 feat: add mock schedule generation flow refs #3
