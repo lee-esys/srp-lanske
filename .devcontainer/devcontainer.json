@@ -1,0 +1,25 @@
+{
+    "name": "srp-lanske",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "Dart-Code.flutter",
+                "Dart-Code.dart-code"
+            ]
+        }
+    },
+    "forwardPorts": [
+        3000
+    ],
+    "portsAttributes": {
+        "3000": {
+            "label": "Flutter Web",
+            "onAutoForward": "openBrowser"
+        }
+    },
+    "postCreateCommand": "flutter doctor && flutter config --enable-web && flutter pub get",
+    "remoteUser": "vscode"
+}
