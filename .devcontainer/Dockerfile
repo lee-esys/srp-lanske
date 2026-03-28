@@ -14,4 +14,5 @@ ENV PATH="${FLUTTER_HOME}/bin:${FLUTTER_HOME}/bin/cache/dart-sdk/bin:${PATH}"
 
 RUN git clone https://github.com/flutter/flutter.git ${FLUTTER_HOME} --branch stable --depth 1
 
-RUN flutter config --enable-web && flutter doctor
+RUN git config --system --add safe.directory /usr/local/flutter
+RUN chown -R vscode:vscode /usr/local/flutter
