@@ -53,6 +53,17 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  void _showMessage(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _syncCourtsController() {
     _courtsController.text = _courts.toString();
   }
@@ -150,6 +161,29 @@ class _HomePageState extends State<HomePage> {
     _setPlayers(current + 1);
   }
 
+  void _resetInputs() {
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _loadedFromUrl = false;
+      _courts = 1;
+
+      _urlController.clear();
+      _eventNameController.clear();
+
+      _syncCourtsController();
+      _syncPlayersWithinRange(resetToDefault: true);
+      _syncDisplayNameControllers();
+
+      for (var i = 0; i < _displayNameControllers.length; i++) {
+        final defaultName = circledNumber(i + 1);
+        _defaultDisplayNames[i] = defaultName;
+        _sourceDisplayNames[i] = defaultName;
+        _displayNameControllers[i].text = defaultName;
+      }
+    });
+  }
+
   Future<void> _fetchEventInfo() async {
     if (_isLoadingEvent) return;
 
@@ -206,6 +240,18 @@ class _HomePageState extends State<HomePage> {
           _displayNameControllers[i].text = name;
         }
       });
+
+      _showMessage('イベント情報を取得しました');
+    } catch (_) {
+      final elapsed = DateTime.now().difference(startedAt);
+      const minLoading = Duration(milliseconds: 500);
+      if (elapsed < minLoading) {
+        await Future.delayed(minLoading - elapsed);
+      }
+
+      if (!mounted) return;
+      // TODO: イベント情報取得失敗時のエラーログを送る仕組みができたら、ここで例外内容も送る。adminにメール送信するのもあり。
+      _showMessage('イベント情報の取得に失敗しました');
     } finally {
       if (!mounted) return;
       setState(() {
@@ -253,6 +299,7 @@ class _HomePageState extends State<HomePage> {
     debugPrint('displayNames: $displayNames');
   }
 
+  // TODO: 分離・共通化できそうなUI部品は切り出す
   Widget _buildStepperField({
     required String label,
     required TextEditingController controller,
@@ -323,6 +370,35 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildDisplayNameGrid() {
+    final items = List.generate(_displayNameControllers.length, (index) {
+      final sourceName = _sourceDisplayNames[index] ?? circledNumber(index + 1);
+      final labelSuffix = '：$sourceName';
+
+      return TextFormField(
+        controller: _displayNameControllers[index],
+        focusNode: _displayNameFocusNodes[index],
+        enabled: !_isLoadingEvent,
+        decoration: InputDecoration(
+          labelText: '参加者${participantLabelNumber(index)}$labelSuffix',
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+      );
+    });
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: List.generate(items.length, (index) {
+        return SizedBox(
+          width: 140,
+          child: items[index],
+        );
+      }),
+    );
+  }
+
   Widget _buildDetailSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,34 +418,37 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        ...List.generate(_displayNameControllers.length, (index) {
-          final sourceName = _sourceDisplayNames[index] ?? circledNumber(index + 1);
-          final labelSuffix = '：$sourceName';
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: TextFormField(
-              controller: _displayNameControllers[index],
-              focusNode: _displayNameFocusNodes[index],
-              enabled: !_isLoadingEvent,
-              decoration: InputDecoration(
-                labelText: '参加者${participantLabelNumber(index)}$labelSuffix',
-                border: const OutlineInputBorder(),
+        _buildDisplayNameGrid(),
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FilledButton.tonal(
+              onPressed: _isLoadingEvent ? null : _resetInputs,
+              style: FilledButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                '入力項目のリセット',
+                style: TextStyle(fontSize: 16),
               ),
             ),
-          );
-        }),
-        const SizedBox(height: 8),
-        Center(
-          child: FilledButton(
-            onPressed: _generateSchedule,
-            style: FilledButton.styleFrom(
-              minimumSize: Size.zero,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: _isLoadingEvent ? null : _generateSchedule,
+              style: FilledButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                '対戦表の生成',
+                style: TextStyle(fontSize: 22),
+              ),
             ),
-            child: const Text('対戦表の生成'),
-          ),
+          ],
         ),
       ],
     );
