@@ -14,6 +14,7 @@ String circledNumber(int number) {
     return String.fromCharCode(0x32B1 + (number - 36));
   }
 
+  // TODO: 51以上が必要になったら拡張
   return number.toString();
 }
 
@@ -28,6 +29,7 @@ String blackCircledNumber(int number) {
     return String.fromCharCode(0x24EB + (number - 11));
   }
 
+  // TODO: 21以上が必要になったら拡張
   return number.toString();
 }
 

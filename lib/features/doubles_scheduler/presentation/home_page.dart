@@ -22,7 +22,6 @@ class _HomePageState extends State<HomePage> {
   final List<String?> _sourceDisplayNames = [];
 
   bool _isLoadingEvent = false;
-  bool _showDetailInputs = false;
   bool _loadedFromUrl = false;
 
   int _courts = 1;
@@ -108,11 +107,12 @@ class _HomePageState extends State<HomePage> {
     if (!_loadedFromUrl) {
       for (var i = 0; i < _displayNameControllers.length; i++) {
         final defaultName = circledNumber(i + 1);
+        final currentText = _displayNameControllers[i].text.trim();
+
         _defaultDisplayNames[i] = defaultName;
         _sourceDisplayNames[i] = defaultName;
 
-        if (_displayNameControllers[i].text.trim().isEmpty ||
-            _displayNameControllers[i].text == _defaultDisplayNames[i]) {
+        if (currentText.isEmpty || currentText == _defaultDisplayNames[i]) {
           _displayNameControllers[i].text = defaultName;
         }
       }
@@ -125,10 +125,7 @@ class _HomePageState extends State<HomePage> {
       _courts = clamped;
       _syncCourtsController();
       _syncPlayersWithinRange(resetToDefault: resetPlayersToDefault);
-
-      if (!_loadedFromUrl) {
-        _syncDisplayNameControllers();
-      }
+      _syncDisplayNameControllers();
     });
   }
 
@@ -136,17 +133,7 @@ class _HomePageState extends State<HomePage> {
     final clamped = value.clamp(_minPlayers, _maxPlayers);
     setState(() {
       _playersController.text = clamped.toString();
-
-      if (!_loadedFromUrl) {
-        _syncDisplayNameControllers();
-      } else {
-        _syncDisplayNameControllers();
-        for (var i = 0; i < _displayNameControllers.length; i++) {
-          if (_sourceDisplayNames[i] == null || _sourceDisplayNames[i]!.isEmpty) {
-            _sourceDisplayNames[i] = circledNumber(i + 1);
-          }
-        }
-      }
+      _syncDisplayNameControllers();
     });
   }
 
@@ -166,8 +153,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchEventInfo() async {
     if (_isLoadingEvent) return;
 
+    FocusScope.of(context).unfocus();
+
     setState(() {
-      _showDetailInputs = true;
       _isLoadingEvent = true;
     });
 
@@ -197,11 +185,12 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         _loadedFromUrl = true;
+
         _courts = (mockData['courts'] as int).clamp(1, 10);
         _syncCourtsController();
 
-        final mockPlayers = (mockData['players'] as int).clamp(_minPlayers, _maxPlayers);
-        _playersController.text = mockPlayers.toString();
+        final mockPlayers = mockData['players'] as int;
+        _playersController.text = mockPlayers.clamp(_minPlayers, _maxPlayers).toString();
 
         _syncDisplayNameControllers();
 
@@ -223,15 +212,6 @@ class _HomePageState extends State<HomePage> {
         _isLoadingEvent = false;
       });
     }
-  }
-
-  void _goNext() {
-    FocusScope.of(context).unfocus();
-
-    setState(() {
-      _showDetailInputs = true;
-      _syncDisplayNameControllers();
-    });
   }
 
   String _formatDateTimeLabel(DateTime dateTime) {
@@ -315,6 +295,34 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildUrlSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _urlController,
+          enabled: !_isLoadingEvent,
+          decoration: const InputDecoration(
+            labelText: 'テニスベア / テニスオフ のイベントURL',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: FilledButton.tonal(
+            onPressed: _fetchEventInfo,
+            style: FilledButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('イベント情報を取得する'),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDetailSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -352,9 +360,16 @@ class _HomePageState extends State<HomePage> {
           );
         }),
         const SizedBox(height: 8),
-        FilledButton(
-          onPressed: _generateSchedule,
-          child: const Text('対戦表の生成'),
+        Center(
+          child: FilledButton(
+            onPressed: _generateSchedule,
+            style: FilledButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('対戦表の生成'),
+          ),
         ),
       ],
     );
@@ -397,19 +412,7 @@ class _HomePageState extends State<HomePage> {
                         style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _urlController,
-                        enabled: !_isLoadingEvent,
-                        decoration: const InputDecoration(
-                          labelText: 'テニスベア / テニスオフ のイベントURL',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.tonal(
-                        onPressed: _fetchEventInfo,
-                        child: const Text('イベント情報を取得する'),
-                      ),
+                      _buildUrlSection(),
                       const SizedBox(height: 16),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -439,14 +442,7 @@ class _HomePageState extends State<HomePage> {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 24),
-                      FilledButton(
-                        onPressed: _goNext,
-                        child: const Text('次へ'),
-                      ),
-                      if (_showDetailInputs) ...[
-                        const SizedBox(height: 24),
-                        _buildDetailSection(),
-                      ],
+                      _buildDetailSection(),
                     ],
                   ),
                 ),
