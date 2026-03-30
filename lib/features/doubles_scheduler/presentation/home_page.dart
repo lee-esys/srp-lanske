@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:srp_lanske/shared/utils/number_label_mapper.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,9 +17,13 @@ class _HomePageState extends State<HomePage> {
   final _eventNameController = TextEditingController();
 
   final List<TextEditingController> _displayNameControllers = [];
+  final List<FocusNode> _displayNameFocusNodes = [];
+  final List<String> _defaultDisplayNames = [];
+  final List<String?> _sourceDisplayNames = [];
 
   bool _isLoadingEvent = false;
   bool _showDetailInputs = false;
+  bool _loadedFromUrl = false;
 
   int _courts = 1;
 
@@ -41,6 +46,9 @@ class _HomePageState extends State<HomePage> {
 
     for (final controller in _displayNameControllers) {
       controller.dispose();
+    }
+    for (final node in _displayNameFocusNodes) {
+      node.dispose();
     }
 
     super.dispose();
@@ -68,14 +76,46 @@ class _HomePageState extends State<HomePage> {
     final players = int.tryParse(_playersController.text) ?? _minPlayers;
 
     while (_displayNameControllers.length < players) {
-      final index = _displayNameControllers.length + 1;
-      _displayNameControllers.add(
-        TextEditingController(text: '参加者$index'),
-      );
+      final index = _displayNameControllers.length;
+      final defaultName = circledNumber(index + 1);
+
+      final controller = TextEditingController(text: defaultName);
+      final focusNode = FocusNode();
+
+      _defaultDisplayNames.add(defaultName);
+      _sourceDisplayNames.add(defaultName);
+
+      focusNode.addListener(() {
+        if (!focusNode.hasFocus) return;
+
+        final currentDefault = _defaultDisplayNames[index];
+        if (_displayNameControllers[index].text == currentDefault) {
+          _displayNameControllers[index].clear();
+        }
+      });
+
+      _displayNameControllers.add(controller);
+      _displayNameFocusNodes.add(focusNode);
     }
 
     while (_displayNameControllers.length > players) {
       _displayNameControllers.removeLast().dispose();
+      _displayNameFocusNodes.removeLast().dispose();
+      _defaultDisplayNames.removeLast();
+      _sourceDisplayNames.removeLast();
+    }
+
+    if (!_loadedFromUrl) {
+      for (var i = 0; i < _displayNameControllers.length; i++) {
+        final defaultName = circledNumber(i + 1);
+        _defaultDisplayNames[i] = defaultName;
+        _sourceDisplayNames[i] = defaultName;
+
+        if (_displayNameControllers[i].text.trim().isEmpty ||
+            _displayNameControllers[i].text == _defaultDisplayNames[i]) {
+          _displayNameControllers[i].text = defaultName;
+        }
+      }
     }
   }
 
@@ -85,7 +125,10 @@ class _HomePageState extends State<HomePage> {
       _courts = clamped;
       _syncCourtsController();
       _syncPlayersWithinRange(resetToDefault: resetPlayersToDefault);
-      _syncDisplayNameControllers();
+
+      if (!_loadedFromUrl) {
+        _syncDisplayNameControllers();
+      }
     });
   }
 
@@ -93,7 +136,17 @@ class _HomePageState extends State<HomePage> {
     final clamped = value.clamp(_minPlayers, _maxPlayers);
     setState(() {
       _playersController.text = clamped.toString();
-      _syncDisplayNameControllers();
+
+      if (!_loadedFromUrl) {
+        _syncDisplayNameControllers();
+      } else {
+        _syncDisplayNameControllers();
+        for (var i = 0; i < _displayNameControllers.length; i++) {
+          if (_sourceDisplayNames[i] == null || _sourceDisplayNames[i]!.isEmpty) {
+            _sourceDisplayNames[i] = circledNumber(i + 1);
+          }
+        }
+      }
     });
   }
 
@@ -128,6 +181,7 @@ class _HomePageState extends State<HomePage> {
           'eventName': 'らんすけ公園庭球場 ${DateTime.now().toIso8601String()}',
           'courts': 1,
           'players': 6,
+          'playerNames': ['らん助', 'すけ太', 'もか', 'ゆき', 'はる', 'あお'],
         },
       );
 
@@ -142,14 +196,26 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
 
       setState(() {
+        _loadedFromUrl = true;
         _courts = (mockData['courts'] as int).clamp(1, 10);
         _syncCourtsController();
 
-        final mockPlayers = mockData['players'] as int;
-        _playersController.text = mockPlayers.clamp(_minPlayers, _maxPlayers).toString();
+        final mockPlayers = (mockData['players'] as int).clamp(_minPlayers, _maxPlayers);
+        _playersController.text = mockPlayers.toString();
+
+        _syncDisplayNameControllers();
 
         _eventNameController.text = mockData['eventName'] as String;
-        _syncDisplayNameControllers();
+
+        final mockNames = (mockData['playerNames'] as List<dynamic>).cast<String>();
+        for (var i = 0; i < _displayNameControllers.length; i++) {
+          final fallback = circledNumber(i + 1);
+          final name = i < mockNames.length ? mockNames[i] : fallback;
+
+          _sourceDisplayNames[i] = name;
+          _defaultDisplayNames[i] = name;
+          _displayNameControllers[i].text = name;
+        }
       });
     } finally {
       if (!mounted) return;
@@ -162,14 +228,49 @@ class _HomePageState extends State<HomePage> {
   void _goNext() {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() {
       _showDetailInputs = true;
       _syncDisplayNameControllers();
     });
+  }
 
-    // TODO: 次Issueで EventDraft 作成 or 次画面遷移を実装
+  String _formatDateTimeLabel(DateTime dateTime) {
+    final y = dateTime.year.toString().padLeft(4, '0');
+    final m = dateTime.month.toString().padLeft(2, '0');
+    final d = dateTime.day.toString().padLeft(2, '0');
+    final hh = dateTime.hour.toString().padLeft(2, '0');
+    final mm = dateTime.minute.toString().padLeft(2, '0');
+
+    return '$y/$m/$d $hh:$mm';
+  }
+
+  String _buildEffectiveEventName() {
+    final raw = _eventNameController.text.trim();
+    if (raw.isNotEmpty) return raw;
+    return _formatDateTimeLabel(DateTime.now());
+  }
+
+  List<String> _buildEffectiveDisplayNames() {
+    return List.generate(_displayNameControllers.length, (index) {
+      final raw = _displayNameControllers[index].text.trim();
+      if (raw.isNotEmpty) return raw;
+
+      final fallback = _sourceDisplayNames[index];
+      if (fallback != null && fallback.isNotEmpty) return fallback;
+
+      return circledNumber(index + 1);
+    });
+  }
+
+  void _generateSchedule() {
+    FocusScope.of(context).unfocus();
+
+    final eventName = _buildEffectiveEventName();
+    final displayNames = _buildEffectiveDisplayNames();
+
+    // TODO: 次Issueで EventDraft 作成 / 生成API呼び出し
+    debugPrint('eventName: $eventName');
+    debugPrint('displayNames: $displayNames');
   }
 
   Widget _buildStepperField({
@@ -179,8 +280,6 @@ class _HomePageState extends State<HomePage> {
     required VoidCallback onIncrement,
     required String tooltipDecrement,
     required String tooltipIncrement,
-    required String? Function(String?) validator,
-    required ValueChanged<String> onChanged,
   }) {
     return Expanded(
       child: Row(
@@ -192,19 +291,17 @@ class _HomePageState extends State<HomePage> {
           ),
           Expanded(
             child: SizedBox(
-              width: 96,
+              width: 84,
               child: TextFormField(
                 controller: controller,
+                readOnly: true,
                 enabled: !_isLoadingEvent,
-                keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
                 decoration: InputDecoration(
                   labelText: label,
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
-                validator: validator,
-                onChanged: onChanged,
               ),
             ),
           ),
@@ -230,11 +327,6 @@ class _HomePageState extends State<HomePage> {
             labelText: 'イベント名',
             border: OutlineInputBorder(),
           ),
-          validator: (value) {
-            if (!_showDetailInputs) return null;
-            if ((value ?? '').trim().isEmpty) return 'イベント名を入力してください';
-            return null;
-          },
         ),
         const SizedBox(height: 16),
         const Text(
@@ -243,25 +335,27 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 8),
         ...List.generate(_displayNameControllers.length, (index) {
+          final sourceName = _sourceDisplayNames[index] ?? circledNumber(index + 1);
+          final labelSuffix = '：$sourceName';
+
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: TextFormField(
               controller: _displayNameControllers[index],
+              focusNode: _displayNameFocusNodes[index],
               enabled: !_isLoadingEvent,
               decoration: InputDecoration(
-                labelText: '参加者${index + 1}',
+                labelText: '参加者${participantLabelNumber(index)}$labelSuffix',
                 border: const OutlineInputBorder(),
               ),
-              validator: (value) {
-                if (!_showDetailInputs) return null;
-                if ((value ?? '').trim().isEmpty) {
-                  return '参加者${index + 1}の表示名を入力してください';
-                }
-                return null;
-              },
             ),
           );
         }),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: _generateSchedule,
+          child: const Text('対戦表の生成'),
+        ),
       ],
     );
   }
@@ -297,6 +391,11 @@ class _HomePageState extends State<HomePage> {
                         'URLを貼るか、手動で面数・人数を入力してください。',
                         style: TextStyle(fontSize: 16),
                       ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        '面数は1〜10まで対応しています。',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _urlController,
@@ -322,17 +421,6 @@ class _HomePageState extends State<HomePage> {
                             onIncrement: _incrementCourts,
                             tooltipDecrement: '面数を減らす',
                             tooltipIncrement: '面数を増やす',
-                            validator: (value) {
-                              final v = int.tryParse(value ?? '');
-                              if (v == null) return '入力';
-                              if (v < 1 || v > 10) return '1〜10';
-                              return null;
-                            },
-                            onChanged: (value) {
-                              final parsed = int.tryParse(value);
-                              if (parsed == null) return;
-                              _setCourts(parsed);
-                            },
                           ),
                           const SizedBox(width: 12),
                           _buildStepperField(
@@ -342,19 +430,6 @@ class _HomePageState extends State<HomePage> {
                             onIncrement: _incrementPlayers,
                             tooltipDecrement: '人数を減らす',
                             tooltipIncrement: '人数を増やす',
-                            validator: (value) {
-                              final v = int.tryParse(value ?? '');
-                              if (v == null) return '入力';
-                              if (v < _minPlayers || v > _maxPlayers) {
-                                return '$_minPlayers〜$_maxPlayers';
-                              }
-                              return null;
-                            },
-                            onChanged: (value) {
-                              final parsed = int.tryParse(value);
-                              if (parsed == null) return;
-                              _setPlayers(parsed);
-                            },
                           ),
                         ],
                       ),
