@@ -9,7 +9,7 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Lanske',
-      // debugShowCheckedModeBanner: false,
+      debugShowCheckedModeBanner: true,
       theme: appTheme,
       home: const EventSetupPage(),
     );
