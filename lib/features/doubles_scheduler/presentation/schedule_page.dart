@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../data/mock_log_store.dart';
 import '../application/generators/simple_scheduler.dart';
 import 'models/event_draft.dart';
-import 'event_setup_page.dart';
 import 'event_list_page.dart';
 
 class SchedulePage extends StatefulWidget {
@@ -18,12 +17,10 @@ class SchedulePage extends StatefulWidget {
 enum _ScheduleMenuAction { edit, log }
 
 class _SchedulePageState extends State<SchedulePage> {
-  static const bool showCompareDebugPanel = false;
-
   final SimpleScheduler _scheduler = const SimpleScheduler();
 
-  int _generationSeed = 0; // TODO: 再生成時の tie-break 用
-  int _currentRoundIndex = 0; // TODO: 対戦終了で更新
+  // TODO: 再生成時の tie-break 用 int _generationSeed = 0;
+  final int _currentRoundIndex = 0; // TODO: 対戦終了で更新
   int _totalPlannedRounds = 6; // TODO: 初期値は暫定
   bool _isAdopted = false;
 
@@ -53,16 +50,12 @@ class _SchedulePageState extends State<SchedulePage> {
     final players = _buildPlayersFromDraft();
 
     return _scheduler.generate(
-      players: players,
-      courtCount: widget.draft.courts,
-      rounds: _totalPlannedRounds,
-      lockFirstRoundByDisplayOrder: true,
-    );
+        players: players, courtCount: widget.draft.courts, rounds: _totalPlannedRounds);
   }
 
   void _regenerate() {
     setState(() {
-      _generationSeed += 1;
+      // TODO: 再生成時の tie-break 用_generationSeed += 1;
       _isAdopted = false;
     });
   }
