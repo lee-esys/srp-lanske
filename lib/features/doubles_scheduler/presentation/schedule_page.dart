@@ -14,7 +14,7 @@ class SchedulePage extends StatefulWidget {
   State<SchedulePage> createState() => _SchedulePageState();
 }
 
-enum _ScheduleMenuAction { edit, log }
+enum _ScheduleMenuAction { edit, list }
 
 class _SchedulePageState extends State<SchedulePage> {
   final SimpleScheduler _scheduler = const SimpleScheduler();
@@ -105,7 +105,7 @@ class _SchedulePageState extends State<SchedulePage> {
       case _ScheduleMenuAction.edit:
         // TODO: EventSetupPage の初期値復元対応後に編集導線を再接続する initialDraft対応
         break;
-      case _ScheduleMenuAction.log:
+      case _ScheduleMenuAction.list:
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const EventListPage()),
@@ -144,7 +144,7 @@ class _SchedulePageState extends State<SchedulePage> {
                 child: Text('このイベントを編集'),
               ),
               PopupMenuItem(
-                value: _ScheduleMenuAction.log,
+                value: _ScheduleMenuAction.list,
                 child: Text('対戦表一覧'),
               ),
             ],
