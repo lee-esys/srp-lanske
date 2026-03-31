@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:srp_lanske/shared/utils/number_label_mapper.dart';
 
-import '../data/event_draft.dart';
+import 'models/event_draft.dart';
 import 'schedule_page.dart';
 
 class EventSetupPage extends StatefulWidget {
+  // TODO: 編集時の initialDraft 対応
   const EventSetupPage({super.key});
 
   @override
