@@ -315,17 +315,6 @@ class _EventSetupPageState extends State<EventSetupPage> {
     });
   }
 
-  void _generateSchedule() {
-    FocusScope.of(context).unfocus();
-
-    final eventName = _buildEffectiveEventName();
-    final displayNames = _buildEffectiveDisplayNames();
-
-    // TODO: 次Issueで EventDraft 作成 / 生成API呼び出し
-    debugPrint('eventName: $eventName');
-    debugPrint('displayNames: $displayNames');
-  }
-
   // TODO: 分離・共通化できそうなUI部品は切り出す
   Widget _buildStepperField({
     required String label,
