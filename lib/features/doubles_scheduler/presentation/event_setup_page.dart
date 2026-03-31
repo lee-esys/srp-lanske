@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:srp_lanske/shared/utils/number_label_mapper.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+import '../data/event_draft.dart';
+import 'schedule_page.dart';
+
+class EventSetupPage extends StatefulWidget {
+  const EventSetupPage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<EventSetupPage> createState() => _EventSetupPageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _EventSetupPageState extends State<EventSetupPage> {
   final _formKey = GlobalKey<FormState>();
 
   final _urlController = TextEditingController();
@@ -182,6 +185,29 @@ class _HomePageState extends State<HomePage> {
         _displayNameControllers[i].text = defaultName;
       }
     });
+  }
+
+  void _submitForm() {
+    FocusScope.of(context).unfocus();
+
+    final eventName = _buildEffectiveEventName();
+    final displayNames = _buildEffectiveDisplayNames();
+    final players = displayNames.length;
+
+    final draft = EventDraft(
+      url: _urlController.text.trim(),
+      courts: _courts,
+      players: players,
+      eventName: eventName,
+      displayNames: displayNames,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SchedulePage(draft: draft),
+      ),
+    );
   }
 
   Future<void> _fetchEventInfo() async {
@@ -437,7 +463,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(width: 12),
             FilledButton(
-              onPressed: _isLoadingEvent ? null : _generateSchedule,
+              onPressed: _isLoadingEvent ? null : _submitForm,
               style: FilledButton.styleFrom(
                 minimumSize: Size.zero,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
-import '../features/doubles_scheduler/presentation/home_page.dart';
+import '../features/doubles_scheduler/presentation/event_setup_page.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -11,7 +11,7 @@ class App extends StatelessWidget {
       title: 'Lanske',
       // debugShowCheckedModeBanner: false,
       theme: appTheme,
-      home: const HomePage(),
+      home: const EventSetupPage(),
     );
   }
 }
