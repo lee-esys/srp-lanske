@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:srp_lanske/shared/config/app_config.dart';
 
-import '../data/mock_log_store.dart';
-import '../application/generators/simple_scheduler.dart';
+import '../application/generated_schedule_service.dart';
+import '../infrastructure/generated_schedule_api_client.dart';
 import 'models/event_draft.dart';
 import 'event_list_page.dart';
 
@@ -17,93 +18,150 @@ class SchedulePage extends StatefulWidget {
 enum _ScheduleMenuAction { edit, list }
 
 class _SchedulePageState extends State<SchedulePage> {
-  final SimpleScheduler _scheduler = const SimpleScheduler();
+  late final GeneratedScheduleService _service;
 
-  // TODO: 再生成時の tie-break 用 int _generationSeed = 0;
-  final int _currentRoundIndex = 0; // TODO: 対戦終了で更新
-  int _totalPlannedRounds = 6; // TODO: 初期値は暫定
-  bool _isAdopted = false;
+  bool _isLoading = true;
+  bool _isAdopting = false;
 
-  final ScrollController _scrollController = ScrollController();
-  final List<GlobalKey> _roundKeys = [];
+  String? _errorMessage;
+  String? _generatedScheduleId;
+  Map<String, dynamic>? _scheduleResponse;
 
   @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+
+    _service = GeneratedScheduleService(
+      GeneratedScheduleApiClient(
+        baseUrl: AppConfig.coreApiBaseUrl,
+      ),
+    );
+
+    _generateSchedule();
   }
 
-  List<SchedulerPlayer> _buildPlayersFromDraft() {
-    return widget.draft.displayNames.asMap().entries.map((entry) {
-      final index = entry.key;
-      final displayName = entry.value;
+  bool get _isAdopted => _scheduleResponse?['adopted'] == true;
 
-      return SchedulerPlayer(
-        inputOrder: index + 1,
-        eventNumber: index + 1,
-        displayName: displayName,
-      );
-    }).toList();
+  Map<String, String> get _playerNameById {
+    return {
+      for (final participant in widget.draft.participants) participant.id: participant.displayName,
+    };
   }
 
-  List<ScheduledRound> _generateSchedule() {
-    final players = _buildPlayersFromDraft();
-
-    return _scheduler.generate(
-        players: players, courtCount: widget.draft.courts, rounds: _totalPlannedRounds);
-  }
-
-  void _regenerate() {
-    setState(() {
-      // TODO: 再生成時の tie-break 用_generationSeed += 1;
-      _isAdopted = false;
-    });
-  }
-
-  void _addRound() {
-    setState(() {
-      _totalPlannedRounds += 1;
-    });
-  }
-
-  void _saveCurrentPlan() {
-    if (_isAdopted) return;
-
-    // TODO: draft だけでなく採用対戦表も保存する
-    MockLogStore.save(widget.draft);
-
-    setState(() {
-      _isAdopted = true;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('この案を採用してログに保存しました'),
-        duration: Duration(seconds: 2),
+  void _showMessage(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  void _scrollToCurrentRound() {
-    if (_currentRoundIndex < 0 || _currentRoundIndex >= _roundKeys.length) {
+  Future<void> _generateSchedule() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await _service.generateFromDraft(widget.draft);
+      if (!mounted) return;
+
+      setState(() {
+        _scheduleResponse = response;
+        _generatedScheduleId = response['generated_schedule_id']?.toString();
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _reloadSchedule() async {
+    final generatedScheduleId = _generatedScheduleId;
+    if (generatedScheduleId == null || generatedScheduleId.isEmpty) {
+      _showMessage('再取得する generated_schedule_id がありません');
       return;
     }
 
-    final targetContext = _roundKeys[_currentRoundIndex].currentContext;
-    if (targetContext == null) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    Scrollable.ensureVisible(
-      targetContext,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      alignment: 0.1,
-    );
+    try {
+      final response = await _service.getById(generatedScheduleId);
+      if (!mounted) return;
+
+      setState(() {
+        _scheduleResponse = response;
+        _generatedScheduleId = response['generated_schedule_id']?.toString() ?? generatedScheduleId;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _adoptSchedule() async {
+    final generatedScheduleId = _generatedScheduleId;
+    if (generatedScheduleId == null || generatedScheduleId.isEmpty) {
+      _showMessage('採用する generated_schedule_id がありません');
+      return;
+    }
+
+    if (_isAdopting) return;
+
+    setState(() {
+      _isAdopting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _service.adopt(generatedScheduleId);
+      if (!mounted) return;
+
+      _showMessage('採用しました');
+      await _reloadSchedule();
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAdopting = false;
+        });
+      }
+    }
   }
 
   void _handleMenu(_ScheduleMenuAction action) {
     switch (action) {
       case _ScheduleMenuAction.edit:
-        // TODO: EventSetupPage の初期値復元対応後に編集導線を再接続する initialDraft対応
+        Navigator.pop(context);
         break;
       case _ScheduleMenuAction.list:
         Navigator.push(
@@ -114,24 +172,221 @@ class _SchedulePageState extends State<SchedulePage> {
     }
   }
 
+  List<Map<String, dynamic>> _asObjectList(Object? value) {
+    if (value is! List) return const [];
+
+    return value
+        .whereType<Map>()
+        .map((e) => e.map((key, value) => MapEntry(key.toString(), value)))
+        .toList(growable: false);
+  }
+
+  List<int> _asIntList(Object? value) {
+    if (value is! List) return const [];
+
+    return value
+        .map((e) {
+          if (e is int) return e;
+          return int.tryParse(e.toString());
+        })
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  Map<int, String> _buildSlotToPlayerId() {
+    final assignment = _asObjectList(_scheduleResponse?['assignment']);
+
+    return {
+      for (final row in assignment)
+        if (row['slot_number'] != null && row['player_id'] != null)
+          int.parse(row['slot_number'].toString()): row['player_id'].toString(),
+    };
+  }
+
+  String _playerLabelFromId(String playerId) {
+    return _playerNameById[playerId] ?? playerId;
+  }
+
+  String _playerLabelFromSlot(int slotNumber, Map<int, String> slotToPlayerId) {
+    final playerId = slotToPlayerId[slotNumber];
+    if (playerId == null) return 'slot:$slotNumber';
+    return _playerLabelFromId(playerId);
+  }
+
+  String _formatTeamFromSlots(List<int> slots, Map<int, String> slotToPlayerId) {
+    if (slots.isEmpty) return '-';
+
+    return slots.map((slot) => '$slot: ${_playerLabelFromSlot(slot, slotToPlayerId)}').join(' / ');
+  }
+
+  String _formatRestPlayersBySlots(List<int> slotNumbers, Map<int, String> slotToPlayerId) {
+    if (slotNumbers.isEmpty) return '-';
+
+    return slotNumbers
+        .map((slot) => '$slot: ${_playerLabelFromSlot(slot, slotToPlayerId)}')
+        .join(' / ');
+  }
+
+  Widget _buildSectionCard({
+    required String title,
+    required Widget child,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard() {
+    return _buildSectionCard(
+      title: '入力内容',
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 8,
+        children: [
+          Text('イベント名: ${widget.draft.eventName}'),
+          Text('面数: ${widget.draft.courts}'),
+          Text('人数: ${widget.draft.players}'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayersCard() {
+    return _buildSectionCard(
+      title: '参加者',
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: widget.draft.participants.asMap().entries.map((entry) {
+          final index = entry.key;
+          final participant = entry.value;
+
+          return Chip(
+            label: Text('${index + 1}: ${participant.displayName}'),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        FilledButton.icon(
+          onPressed: _isLoading ? null : _generateSchedule,
+          icon: const Icon(Icons.refresh),
+          label: const Text('再生成'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: (_isLoading || _generatedScheduleId == null) ? null : _reloadSchedule,
+          icon: const Icon(Icons.download),
+          label: const Text('再取得'),
+        ),
+        FilledButton(
+          onPressed: (_isLoading || _isAdopting || _generatedScheduleId == null || _isAdopted)
+              ? null
+              : _adoptSchedule,
+          child: _isAdopting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('採用'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScheduleRounds() {
+    final rounds = _asObjectList(_scheduleResponse?['rounds']);
+    final slotToPlayerId = _buildSlotToPlayerId();
+
+    if (rounds.isEmpty) {
+      return const Text('対戦表データがありません');
+    }
+
+    return Column(
+      children: rounds.map((round) {
+        final roundNumber = round['round_number']?.toString() ?? '-';
+        final restSlotNumbers = _asIntList(round['rest_slot_numbers']);
+        final courts = _asObjectList(round['courts']);
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '第$roundNumber試合',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...courts.map((court) {
+                  final courtNumber = court['court_number']?.toString() ?? '-';
+                  final team1Slots = _asIntList(court['team1_player_slots']);
+                  final team2Slots = _asIntList(court['team2_player_slots']);
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'コート$courtNumber',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_formatTeamFromSlots(team1Slots, slotToPlayerId)}  vs  ${_formatTeamFromSlots(team2Slots, slotToPlayerId)}',
+                        ),
+                        // const SizedBox(height: 2),
+                        // Text(
+                        //   '${team1Slots.join(" / ")}  vs  ${team2Slots.join(" / ")}',
+                        //   style: Theme.of(context).textTheme.bodySmall,
+                        // ),
+                      ],
+                    ),
+                  );
+                }),
+                const Divider(),
+                Text('休憩: ${_formatRestPlayersBySlots(restSlotNumbers, slotToPlayerId)}'),
+              ],
+            ),
+          ),
+        );
+      }).toList(growable: false),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    late final List<ScheduledRound> rounds;
-    String? scheduleError;
-
-    try {
-      rounds = _generateSchedule();
-    } catch (e) {
-      rounds = [];
-      scheduleError = e.toString();
-    }
-
-    if (_roundKeys.length != rounds.length) {
-      _roundKeys
-        ..clear()
-        ..addAll(List.generate(rounds.length, (_) => GlobalKey()));
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.draft.eventName),
@@ -150,236 +405,39 @@ class _SchedulePageState extends State<SchedulePage> {
             ],
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(72),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            color: Theme.of(context).colorScheme.surfaceContainerLowest,
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: _scrollToCurrentRound,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 4,
-                      ),
-                      child: Text(
-                        '面数: ${widget.draft.courts}   '
-                        '人数: ${widget.draft.players}   '
-                        '進行: ${_currentRoundIndex + 1}/$_totalPlannedRounds試合',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (!_isAdopted) ...[
-                  FilledButton.icon(
-                    onPressed: _saveCurrentPlan,
-                    icon: const Icon(Icons.save),
-                    label: const Text('採用'),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                FilledButton(
-                  onPressed: _addRound,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(48, 48),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                  ),
-                  child: const Icon(Icons.add),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
       body: SafeArea(
-        top: false,
-        child: scheduleError != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    '対戦表生成エラー\n$scheduleError',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+        child: _isLoading && _scheduleResponse == null
+            ? const Center(
+                child: CircularProgressIndicator(),
               )
             : ListView(
-                controller: _scrollController,
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _ScheduleSummaryCard(draft: widget.draft),
+                  _buildSummaryCard(),
                   const SizedBox(height: 12),
-                  _SchedulePlayersCard(displayNames: widget.draft.displayNames),
+                  _buildPlayersCard(),
                   const SizedBox(height: 12),
-                  ...List.generate(rounds.length, (index) {
-                    final round = rounds[index];
-                    return _RoundCard(
-                      key: _roundKeys[index],
-                      round: round,
-                      isCurrentRound: index == _currentRoundIndex,
-                    );
-                  }),
+                  _buildSectionCard(
+                    title: '操作',
+                    child: _buildActionButtons(),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSectionCard(
+                    title: '対戦表',
+                    child: _buildScheduleRounds(),
+                  ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    _buildSectionCard(
+                      title: 'エラー',
+                      child: Text(_errorMessage!),
+                    ),
+                  ],
                   const SizedBox(height: 80),
                 ],
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _regenerate,
-        icon: const Icon(Icons.refresh),
-        label: const Text('さらに生成'),
-      ),
-    );
-  }
-}
-
-class _ScheduleSummaryCard extends StatelessWidget {
-  const _ScheduleSummaryCard({required this.draft});
-
-  final EventDraft draft;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Wrap(
-          spacing: 16,
-          runSpacing: 8,
-          children: [
-            Text('イベント名: ${draft.eventName}'),
-            Text('面数: ${draft.courts}'),
-            Text('人数: ${draft.players}'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SchedulePlayersCard extends StatelessWidget {
-  const _SchedulePlayersCard({required this.displayNames});
-
-  final List<String> displayNames;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: displayNames.asMap().entries.map((entry) {
-            return Chip(
-              label: Text('${entry.key + 1}: ${entry.value}'),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-}
-
-class _RoundCard extends StatelessWidget {
-  const _RoundCard({
-    super.key,
-    required this.round,
-    required this.isCurrentRound,
-  });
-
-  final ScheduledRound round;
-  final bool isCurrentRound;
-
-  @override
-  Widget build(BuildContext context) {
-    final cardColor = isCurrentRound ? Theme.of(context).colorScheme.primaryContainer : null;
-
-    return Card(
-      color: cardColor,
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '第${round.roundNumber}試合',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...round.courts.asMap().entries.map((entry) {
-              final courtIndex = entry.key + 1;
-              final court = entry.value;
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _CourtMatchRow(
-                  courtIndex: courtIndex,
-                  roundNumber: round.roundNumber,
-                  court: court,
-                ),
-              );
-            }),
-            const Divider(),
-            Text(
-              '休憩: ${round.restPlayers.map((p) => '${p.eventNumber}: ${p.displayName}').join(' / ')}',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CourtMatchRow extends StatelessWidget {
-  const _CourtMatchRow({
-    required this.courtIndex,
-    required this.roundNumber,
-    required this.court,
-  });
-
-  final int courtIndex;
-  final int roundNumber;
-  final ScheduledCourt court;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'コート$courtIndex',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${court.teamA[0].eventNumber}: ${court.teamA[0].displayName} / '
-          '${court.teamA[1].eventNumber}: ${court.teamA[1].displayName}'
-          '  vs  '
-          '${court.teamB[0].eventNumber}: ${court.teamB[0].displayName} / '
-          '${court.teamB[1].eventNumber}: ${court.teamB[1].displayName}',
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '${court.teamA[0].eventNumber} / ${court.teamA[1].eventNumber}'
-          '  vs  '
-          '${court.teamB[0].eventNumber} / ${court.teamB[1].eventNumber}',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
     );
   }
 }
