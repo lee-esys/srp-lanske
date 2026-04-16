@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:srp_lanske/shared/utils/number_label_mapper.dart';
 
+import '../domain/participant_draft.dart';
 import 'models/event_draft.dart';
 import 'schedule_page.dart';
 
@@ -193,14 +194,16 @@ class _EventSetupPageState extends State<EventSetupPage> {
 
     final eventName = _buildEffectiveEventName();
     final displayNames = _buildEffectiveDisplayNames();
-    final players = displayNames.length;
+
+    final participants = displayNames
+        .map((name) => ParticipantDraft.create(displayName: name))
+        .toList(growable: false);
 
     final draft = EventDraft(
       url: _urlController.text.trim(),
       courts: _courts,
-      players: players,
       eventName: eventName,
-      displayNames: displayNames,
+      participants: participants,
     );
 
     Navigator.push(
@@ -280,10 +283,11 @@ class _EventSetupPageState extends State<EventSetupPage> {
       // TODO: イベント情報取得失敗時のエラーログを送る仕組みができたら、ここで例外内容も送る。adminにメール送信するのもあり。
       _showMessage('イベント情報の取得に失敗しました');
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingEvent = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingEvent = false;
+        });
+      }
     }
   }
 
