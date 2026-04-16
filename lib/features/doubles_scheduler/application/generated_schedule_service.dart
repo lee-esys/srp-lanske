@@ -1,0 +1,34 @@
+import '../infrastructure/generated_schedule_api_client.dart';
+import '../presentation/models/event_draft.dart';
+
+class GeneratedScheduleService {
+  GeneratedScheduleService(this._apiClient);
+
+  final GeneratedScheduleApiClient _apiClient;
+
+  Future<Map<String, dynamic>> generateFromDraft(EventDraft draft) {
+    final request = <String, dynamic>{
+      'schedule_type': 'doubles',
+      'courts': draft.courts,
+      'players': draft.participants
+          .map(
+            (participant) => <String, dynamic>{
+              'player_id': participant.id,
+              // TODO: core の OpenAPI に合わせて必要項目があればここへ追加
+              // 例: display_name, level, gender など
+            },
+          )
+          .toList(growable: false),
+    };
+
+    return _apiClient.generate(body: request);
+  }
+
+  Future<Map<String, dynamic>> getById(String generatedScheduleId) {
+    return _apiClient.getById(generatedScheduleId);
+  }
+
+  Future<Map<String, dynamic>> adopt(String generatedScheduleId) {
+    return _apiClient.adopt(generatedScheduleId);
+  }
+}
